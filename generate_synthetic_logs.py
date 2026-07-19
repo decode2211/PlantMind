@@ -939,7 +939,7 @@ FAILURE_MODE_KB = {
                 "Manually cleaned clogged distribution nozzles (`{part_num}`), pressure washed top deck and fill media (`{press} PSI`), replaced broken fill sections, and reset blowdown conductivity controller to `{hz} uS/cm`.",
                 "Descaled distribution header and nozzles, vacuumed scale debris (`{debris_amt}`) from cold water basin, and repaired chemical scale inhibitor dosing pump tubing (`{part_num}`).",
                 "Removed and acid-cleaned conductivity controller probe (`{part_num}`), verified calibration (`{hz} uS/cm`), manually triggered blowdown (`{gpm} GPM`), and flushed basin.",
-                "Replaced makeup water solenoid valve (`{part_num}`), drained basin, pressure washed `{thickness} inch` scale from heater elements, and shock-dosed scale inhibitor (`{lbs_charge} gal`)."
+                "Replaced makeup water solenoid valve (`{part_num}`), drained basin, pressure washed `{thickness} inch` scale from heater elements, and shock-dosed scale inhibitor (`{lbs_charge}`)."
             ],
             "parts": [
                 ["Cooling Tower Spray Nozzles (12-Pack)", "Conductivity Blowdown Solenoid Valve Rebuild Kit"],
@@ -1113,12 +1113,12 @@ FAILURE_MODE_KB = {
                 "Gasket failure (`{clog_pct}` torn) on the sudden pressure relay (`SPR`) mounting flange allowed pressurized nitrogen and oil mist to escape."
             ],
             "actions": [
-                "De-energized and grounded transformer, lowered oil level slightly, re-torqued main cover and bushing flange bolts (`{torque}` torque) in crisscross pattern, and topped off with `{lbs_charge} gal` degassed mineral oil.",
-                "Isolated transformer, replaced degraded bushing turret gaskets and radiator flange gaskets using nitrile cork sheets (`{part_num}`), vacuum treated and topped off dielectric oil (`{lbs_charge} gal`).",
-                "Repaired leaking radiator weld seam using approved epoxy/brazing procedure (`{part_num}`), replaced tap changer O-ring seal, and refilled transformer with certified Type II dielectric mineral oil (`{lbs_charge} drum`).",
-                "Re-torqued all exterior radiator and cover flange bolts to `{torque}`, replaced leaking drain valve assembly (`{part_num}`), topped off insulating oil, and pulled oil sample for DGA test (`{ppm} ppm`).",
+                "De-energized and grounded transformer, lowered oil level slightly, re-torqued main cover and bushing flange bolts (`{torque}` torque) in crisscross pattern, and topped off with `{lbs_charge}` degassed mineral oil.",
+                "Isolated transformer, replaced degraded bushing turret gaskets and radiator flange gaskets using nitrile cork sheets (`{part_num}`), vacuum treated and topped off dielectric oil (`{lbs_charge}`).",
+                "Repaired leaking radiator weld seam using approved epoxy/brazing procedure (`{part_num}`), replaced tap changer O-ring seal, and refilled transformer with certified Type II dielectric mineral oil (`{lbs_charge}`).",
+                "Re-torqued all exterior radiator and cover flange bolts to `{torque}`, replaced leaking drain valve assembly (`{part_num}`), topped off insulating oil, and pulled oil sample for DGA test (`{ppm}`).",
                 "Replaced defective sudden pressure relay gasket (`{part_num}`), purged headspace with dry nitrogen (`{press} PSI`), and verified leak-tight seal with soap solution.",
-                "Drained `{lbs_charge} gal` of oil, removed LV bushing, cleaned sealing surfaces (`{debris_amt}` removed), installed new molded nitrile gasket (`{part_num}`), and reassembled."
+                "Drained `{lbs_charge}` of oil, removed LV bushing, cleaned sealing surfaces (`{debris_amt}` removed), installed new molded nitrile gasket (`{part_num}`), and reassembled."
             ],
             "parts": [
                 ["Nitrile-Cork Transformer Gasket Sheet Kit", "Type II Inhibited Dielectric Mineral Oil (15 Gallons)", "Flange Bolt Set"],
@@ -1205,7 +1205,7 @@ FAILURE_MODE_KB = {
         "breaker trip failure": {
             "symptoms": [
                 "Main molded case circuit breaker (`MCCB`) failed to trip during downstream short circuit event (`{current} Amps` fault), causing upstream feeder breaker to clear fault.",
-                "Electronic trip unit on main breaker showing fault LED flashing (`{hz} Hz`). Breaker fails to close or reset (`{degree}` mechanical binding in handle lever).",
+                "Electronic trip unit on main breaker showing fault LED flashing (`{hz}`). Breaker fails to close or reset (`{degree}` mechanical binding in handle lever).",
                 "Routine secondary injection testing revealed feeder breaker long-time and short-time trip units failed to actuate within specified curve (`> {percent}` time delay).",
                 "Ops reported breaker handle stuck in middle/tripped position (`{torque}` resistance). Internal mechanism clicking but contacts will not latch closed.",
                 "Arc flash relay initiated trip command (`{time_period}` response) but main ACB failed to open. Backup breaker cleared fault after `{hz}` cycles.",
@@ -1759,6 +1759,8 @@ SYNONYMS = {
     "{thickness}": [lambda: f"{random.uniform(0.04, 0.16):.2f}", lambda: f"{random.uniform(0.10, 0.28):.2f}"],
     "{hours}": [lambda: str(random.randint(8000, 16000)), lambda: str(random.randint(14000, 28000)), lambda: str(random.randint(25000, 45000))],
     "{time_period}": [lambda: f"{random.randint(4, 11)} months", lambda: f"{random.randint(1, 4)} years", lambda: f"{random.randint(12, 36)} months"],
+    "{length}": [lambda: f"{random.uniform(0.5, 4.0):.1f}", lambda: f"{random.uniform(1.0, 6.0):.1f}", lambda: f"{random.uniform(2.5, 8.5):.1f}"],
+    "{years}": [lambda: str(random.randint(3, 15)), lambda: str(random.randint(5, 20)), lambda: str(random.randint(8, 25))],
     "{clog_pct}": [lambda: f"{random.randint(25, 55)}%", lambda: f"{random.randint(50, 85)}%", lambda: f"{random.randint(65, 92)}%"],
     "{percent}": [lambda: f"{random.randint(12, 35)}%", lambda: f"{random.randint(28, 62)}%", lambda: f"{random.randint(45, 85)}%"],
     "{torque}": [lambda: f"{random.randint(35, 85)} ft-lbs", lambda: f"{random.randint(90, 165)} ft-lbs", lambda: f"{random.randint(220, 380)} in-lbs"],
