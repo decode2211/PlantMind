@@ -142,6 +142,56 @@ def analyze_failure_patterns(query: str, df: pd.DataFrame) -> str:
 
     return "Could not determine a specific pattern analysis for your query based on the available data."
 
+# 2.6 Root Cause Analysis (RCA) Mode
+def is_rca_query(query: str) -> bool:
+    keywords = [
+        "why is", "what's causing", "what is causing",
+        "troubleshoot", "diagnose",
+        "vibrating", "making noise", "not working",
+        "failing", "leaking", "overheating",
+        "won't start", "wont start", "malfunction",
+        "issue with", "problem with"
+    ]
+    query_lower = query.lower()
+    return any(kw in query_lower for kw in keywords)
+
+def build_rca_prompt(query: str, retrieved_chunks: list) -> tuple[str, str]:
+    """Returns (system_prompt, user_msg) for an RCA-structured Groq call."""
+    context_texts = []
+    for i, item in enumerate(retrieved_chunks, 1):
+        text = item["text"]
+        meta = item["metadata"]
+        src_type = meta.get("source_type", "unknown")
+        if src_type == "manual":
+            src_str = f"Manual: {meta.get('source_file')} (Page {meta.get('page_number')})"
+        else:
+            src_str = f"Work Order: {meta.get('source_file')} (Asset: {meta.get('asset_id')})"
+        context_texts.append(f"--- Chunk {i} ({src_str}) ---\n{text}\n")
+    context_block = "\n".join(context_texts)
+
+    system_prompt = (
+        "You are an expert industrial maintenance engineer performing Root Cause Analysis (RCA). "
+        "You MUST use ONLY the context chunks provided below — do not draw on external knowledge. "
+        "If the context does not contain enough information to fill any section confidently, explicitly state that in that section. "
+        "Structure your entire response using these exact markdown headings and no others:\n\n"
+        "## Likely Root Cause(s)\n"
+        "List 1–3 most probable causes ranked by likelihood, based strictly on the provided context.\n\n"
+        "## Supporting Evidence\n"
+        "Reference specific work order IDs and manual page numbers from the context that support each cause.\n\n"
+        "## Recommended Action\n"
+        "Provide concrete next steps a field technician should take, drawn only from the retrieved content.\n\n"
+        "## Confidence Level\n"
+        "State High / Medium / Low and explain briefly — e.g. \"High: 4 similar past incidents found with matching root cause\" "
+        "or \"Low: limited historical data, primarily based on general manual guidance\"."
+    )
+
+    user_msg = (
+        f"Context information is below:\n\n{context_block}\n\n"
+        f"Symptom / Problem reported by technician: {query}\n\n"
+        "Perform a Root Cause Analysis using ONLY the context above."
+    )
+    return system_prompt, user_msg
+
 # 3. Setup Groq Client
 groq_api_key = os.environ.get("GROQ_API_KEY")
 
@@ -179,8 +229,9 @@ with st.sidebar:
         st.write("Stats unavailable at the moment.")
         
     st.markdown("---")
-    st.subheader("💡 Pro Tip")
-    st.write("Try asking about patterns: *'What are the most common failure modes?'* or *'Which equipment fails most often?'*")
+    st.subheader("💡 Pro Tips")
+    st.write("**Patterns:** *'What are the most common failure modes?'* or *'Which equipment fails most often?'*")
+    st.write("**Troubleshooting:** *'Why is my pump vibrating?'* or *'What\'s causing the compressor to overheat?'*")
 
 # 5. Chat History Setup
 if "messages" not in st.session_state:
@@ -211,6 +262,46 @@ if prompt := st.chat_input("Ask about equipment maintenance or manuals..."):
                 response = analyze_failure_patterns(prompt, df_work_orders)
             message_placeholder.markdown(response)
             sources_to_show = []
+        elif is_rca_query(prompt):
+            with st.spinner("🔧 Running Root Cause Analysis..."):
+                retrieved = hybrid_retrieve(prompt)
+            if not retrieved:
+                st.warning("No relevant information found in the knowledge base for RCA.")
+                response = "I couldn't find enough context to perform a root cause analysis."
+                sources_to_show = []
+                message_placeholder.markdown(response)
+            else:
+                sources_to_show = []
+                for item in retrieved:
+                    meta = item["metadata"]
+                    src_type = meta.get("source_type", "unknown")
+                    asset_id = meta.get('asset_id') or "N/A"
+                    page_num = meta.get('page_number') or "N/A"
+                    sources_to_show.append(
+                        f"- **{src_type}**: `{meta.get('source_file')}` | Asset: {asset_id} | Page: {page_num}"
+                    )
+                rca_system_prompt, rca_user_msg = build_rca_prompt(prompt, retrieved)
+                messages_for_llm = [
+                    {"role": "system", "content": rca_system_prompt},
+                    {"role": "user", "content": rca_user_msg}
+                ]
+                try:
+                    with st.spinner("Generating root cause analysis..."):
+                        completion = groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=messages_for_llm,
+                            temperature=0.1,
+                        )
+                    response = completion.choices[0].message.content
+                    st.markdown("**🔧 Root Cause Analysis**")
+                    message_placeholder.markdown(response)
+                    with st.expander("Sources used"):
+                        for src in sources_to_show:
+                            st.markdown(src)
+                except Exception as e:
+                    response = f"Error calling Groq API: {e}"
+                    message_placeholder.error(response)
+                    sources_to_show = []
         else:
             with st.spinner("Searching PlantMind knowledge base..."):
                 retrieved = hybrid_retrieve(prompt)
