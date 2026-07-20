@@ -142,6 +142,185 @@ def analyze_failure_patterns(query: str, df: pd.DataFrame) -> str:
 
     return "Could not determine a specific pattern analysis for your query based on the available data."
 
+# 2.55 Compliance Intelligence
+import datetime
+
+COMPLIANCE_RULES = {
+    "Steam Boiler": [
+        {"requirement_name": "Pressure vessel inspection",      "frequency_months": 12, "description": "Full internal and external inspection per IBR regulations."},
+        {"requirement_name": "Safety relief valve test",         "frequency_months": 6,  "description": "Functional test and calibration of all safety relief valves."},
+        {"requirement_name": "Water quality analysis",           "frequency_months": 3,  "description": "Boiler feed-water chemical analysis for pH, TDS, and dissolved oxygen."},
+    ],
+    "Power Transformer": [
+        {"requirement_name": "Dielectric oil testing",           "frequency_months": 12, "description": "BDV and moisture content test of transformer insulating oil."},
+        {"requirement_name": "Insulation resistance test",       "frequency_months": 24, "description": "Megger test of HV and LV winding insulation."},
+    ],
+    "Air Compressor": [
+        {"requirement_name": "Safety valve certification",       "frequency_months": 12, "description": "Third-party certification of pressure safety valves."},
+        {"requirement_name": "Pressure vessel re-certification", "frequency_months": 24, "description": "Statutory re-certification of air receiver vessel."},
+    ],
+    "Main Distribution Panel": [
+        {"requirement_name": "Thermal imaging inspection",       "frequency_months": 6,  "description": "Infrared thermography to detect hotspots in busbars and connections."},
+        {"requirement_name": "Breaker maintenance test",         "frequency_months": 12, "description": "Contact resistance and trip-time testing of all MCCBs and ACBs."},
+    ],
+    "Cooling Tower": [
+        {"requirement_name": "Water treatment compliance check", "frequency_months": 3,  "description": "Verify biocide dosing levels and water chemistry are within prescribed limits."},
+        {"requirement_name": "Legionella risk assessment",       "frequency_months": 6,  "description": "Microbiological sampling and risk assessment per health & safety guidelines."},
+    ],
+    "Centrifugal Pump": [
+        {"requirement_name": "Mechanical seal inspection",       "frequency_months": 12, "description": "Inspection and replacement of mechanical seals to prevent process fluid leakage."},
+        {"requirement_name": "Vibration baseline survey",        "frequency_months": 6,  "description": "ISO 10816 vibration measurement to establish and compare baseline."},
+    ],
+    "Submersible Pump": [
+        {"requirement_name": "Motor winding insulation test",    "frequency_months": 12, "description": "Megger test of submersible motor windings for moisture ingress."},
+    ],
+    "Induction Motor": [
+        {"requirement_name": "Winding insulation resistance test","frequency_months": 12, "description": "Megger test to verify winding insulation integrity."},
+        {"requirement_name": "Earthing continuity check",        "frequency_months": 6,  "description": "Verify earthing conductor continuity and ground resistance."},
+    ],
+    "Refrigerated Air Dryer": [
+        {"requirement_name": "Refrigerant leak check",           "frequency_months": 6,  "description": "Leak detection survey per F-Gas/refrigerant regulation compliance."},
+    ],
+    "Centrifugal Chiller": [
+        {"requirement_name": "Refrigerant log compliance",       "frequency_months": 3,  "description": "Mandatory refrigerant charge/leak log update per environmental regulations."},
+        {"requirement_name": "Pressure vessel inspection",       "frequency_months": 24, "description": "Statutory inspection of evaporator and condenser shells."},
+    ],
+    "Scroll Chiller": [
+        {"requirement_name": "Refrigerant leak check",           "frequency_months": 6,  "description": "Leak detection survey and refrigerant log update."},
+    ],
+    "Belt Conveyor": [
+        {"requirement_name": "Guarding and safety audit",        "frequency_months": 6,  "description": "Inspection of all nip-point guards, emergency stops, and pull-cord switches."},
+        {"requirement_name": "Load-bearing structure inspection","frequency_months": 12, "description": "Structural integrity check of conveyor frame, idlers, and pulleys."},
+    ],
+}
+
+_INSPECTION_KEYWORDS = [
+    "inspect", "test", "certif", "audit", "check", "survey",
+    "calibrat", "analysis", "megger", "thermograph", "imaging",
+]
+
+def is_compliance_query(query: str) -> bool:
+    keywords = [
+        "compliance", "inspection due", "certification", "regulatory",
+        "audit", "overdue", "compliant", "inspection schedule",
+        "when is the next inspection",
+        # broader phrasings
+        "inspection requirement", "requirements for", "what compliance",
+        "compliance requirements", "inspection frequency",
+        "how often should", "maintenance schedule required",
+    ]
+    query_lower = query.lower()
+    return any(kw in query_lower for kw in keywords)
+
+def check_compliance(query: str, df: pd.DataFrame) -> str:
+    query_lower = query.lower()
+    today = datetime.date.today()
+    lines = ["### ✅ Compliance Check\n"]
+
+    # --- Try to resolve a specific asset ---
+    asset_match = re.search(r'\b([A-Z]+-\d+)\b', query, re.IGNORECASE)
+    mentioned_asset = None
+    if asset_match:
+        mentioned_asset = asset_match.group(1).upper()
+    elif not df.empty and 'asset_id' in df.columns:
+        for asset in df['asset_id'].dropna().unique():
+            if str(asset).lower() in query_lower:
+                mentioned_asset = str(asset)
+                break
+
+    if mentioned_asset and not df.empty and 'asset_id' in df.columns:
+        asset_rows = df[df['asset_id'] == mentioned_asset]
+        if asset_rows.empty:
+            lines.append(f"No work order records found for **{mentioned_asset}**.")
+        else:
+            equip_type = None
+            for col in ['equipment_type', 'asset_type']:
+                if col in df.columns:
+                    val = asset_rows.iloc[0][col]
+                    if pd.notna(val):
+                        equip_type = str(val)
+                        break
+
+            lines.append(f"**Asset:** {mentioned_asset}  |  **Type:** {equip_type or 'Unknown'}")
+            rules = COMPLIANCE_RULES.get(equip_type, [])
+            if not rules:
+                lines.append(f"\n_No compliance rules configured for equipment type '{equip_type}'._")
+            else:
+                lines.append("\n| Requirement | Frequency | Status |")
+                lines.append("|---|---|---|")
+                for rule in rules:
+                    req   = rule["requirement_name"]
+                    freq  = rule["frequency_months"]
+                    descr = rule["description"]
+
+                    # Find most recent work order that looks inspection-related
+                    last_date = None
+                    for date_col in ['date', 'work_order_date', 'created_date', 'completion_date']:
+                        if date_col in asset_rows.columns:
+                            text_cols = [c for c in ['action_taken', 'symptom_description', 'description', 'notes']
+                                         if c in asset_rows.columns]
+                            for _, row in asset_rows.iterrows():
+                                combined = " ".join(str(row.get(c, "")) for c in text_cols).lower()
+                                if any(kw in combined for kw in _INSPECTION_KEYWORDS):
+                                    try:
+                                        d = pd.to_datetime(row[date_col]).date()
+                                        if last_date is None or d > last_date:
+                                            last_date = d
+                                    except Exception:
+                                        pass
+                            break
+
+                    if last_date:
+                        months_since = (today - last_date).days / 30.44
+                        if months_since > freq:
+                            status = f"⚠️ Potentially Overdue ({months_since:.0f} mo since last record; due every {freq} mo)"
+                        else:
+                            status = f"✅ Within Window ({months_since:.0f} mo since last record; due every {freq} mo)"
+                    else:
+                        status = f"❓ No inspection record found (required every {freq} mo)"
+
+                    lines.append(f"| {req} | Every {freq} months | {status} |")
+                    lines.append(f"| _↳ {descr}_ | | |")
+        return "\n".join(lines)
+
+    # --- No specific asset: try matching an equipment type name in the query ---
+    matched_equip_type = None
+    for equip_type in COMPLIANCE_RULES:
+        if equip_type.lower() in query_lower:
+            matched_equip_type = equip_type
+            break
+    # Also try singular/plural variants (e.g. "steam boilers" -> "Steam Boiler")
+    if matched_equip_type is None:
+        for equip_type in COMPLIANCE_RULES:
+            # strip trailing 's' from query words and check again
+            singular = equip_type.lower().rstrip('s')
+            if singular and singular in query_lower:
+                matched_equip_type = equip_type
+                break
+
+    if matched_equip_type:
+        rules = COMPLIANCE_RULES[matched_equip_type]
+        lines.append(f"**Equipment Type:** {matched_equip_type}\n")
+        lines.append("| Requirement | Frequency | Description |")
+        lines.append("|---|---|---|")
+        for rule in rules:
+            lines.append(
+                f"| {rule['requirement_name']} "
+                f"| Every {rule['frequency_months']} months "
+                f"| {rule['description']} |"
+            )
+        return "\n".join(lines)
+
+    # --- Final fallback: show all equipment types ---
+    lines.append("No specific asset or equipment type mentioned — showing compliance requirements for all equipment types.\n")
+    for equip_type, rules in COMPLIANCE_RULES.items():
+        lines.append(f"**{equip_type}**")
+        for rule in rules:
+            lines.append(f"- {rule['requirement_name']} — every **{rule['frequency_months']} months**")
+            lines.append(f"  _{rule['description']}_")
+        lines.append("")
+    return "\n".join(lines)
+
 # 2.6 Root Cause Analysis (RCA) Mode
 def is_rca_query(query: str) -> bool:
     keywords = [
@@ -230,8 +409,9 @@ with st.sidebar:
         
     st.markdown("---")
     st.subheader("💡 Pro Tips")
-    st.write("**Patterns:** *'What are the most common failure modes?'* or *'Which equipment fails most often?'*")
-    st.write("**Troubleshooting:** *'Why is my pump vibrating?'* or *'What\'s causing the compressor to overheat?'*")
+    st.write("📊 **Patterns:** *'What are the most common failure modes?'* or *'Which equipment fails most often?'*")
+    st.write("🔧 **Troubleshooting:** *'Why is my pump vibrating?'* or *'What\'s causing the compressor to overheat?'*")
+    st.write("✅ **Compliance:** *'What compliance checks apply to BLR-501?'* or *'What are the inspection requirements for steam boilers?'*")
 
 # 5. Chat History Setup
 if "messages" not in st.session_state:
@@ -257,7 +437,13 @@ if prompt := st.chat_input("Ask about equipment maintenance or manuals..."):
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         
-        if is_pattern_query(prompt):
+        if is_compliance_query(prompt):
+            with st.spinner("Checking compliance records..."):
+                response = check_compliance(prompt, df_work_orders)
+            st.markdown("**✅ Compliance Check**")
+            message_placeholder.markdown(response)
+            sources_to_show = []
+        elif is_pattern_query(prompt):
             with st.spinner("Analyzing failure patterns..."):
                 response = analyze_failure_patterns(prompt, df_work_orders)
             message_placeholder.markdown(response)
